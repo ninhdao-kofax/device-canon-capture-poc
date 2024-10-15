@@ -1,0 +1,169 @@
+apply plugin: 'java'
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://pkgs.dev.azure.com/printix/_packaging/printix/maven/v1'
+        credentials {
+            username System.getenv("AZURE_ARTIFACTS_USER") ? System.getenv("AZURE_ARTIFACTS_USER") : "$azureArtifactsUser"
+            password System.getenv("AZURE_ARTIFACTS_TOKEN") ? System.getenv("AZURE_ARTIFACTS_TOKEN") : "$azureArtifactsToken"
+        }
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+ext {
+    version = project.getProperties().getOrDefault("build_version", "2025.1.0.0.0")
+    junit_version = "5.9.1"
+    servlet_unit_test_version = "4.0.1"
+}
+
+configurations {
+    provided
+}
+
+sourceSets {
+    main.java.srcDirs = ['src']
+    main.resources.srcDirs = ['resources']    
+    test.java.srcDirs = ['test'] 
+    
+    main.compileClasspath += files(configurations.provided)
+
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+dependencies {    
+    implementation 'org.projectlombok:lombok:1.18.32'
+    compileOnly fileTree(dir: 'lib/meap', include:['*.jar'])
+    compileOnly fileTree(dir: 'lib', include:['json-20240303.jar'])
+    
+    implementation fileTree(dir: 'resources', include: ['DistributableSoftware.jar'])   
+    implementation fileTree(dir: 'lib', include: ['json-20240303.jar'])
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.12.7.1'
+
+    compileOnly 'org.projectlombok:lombok:1.18.32'
+    annotationProcessor 'org.projectlombok:lombok:1.18.32'
+
+    testCompileOnly 'org.projectlombok:lombok:1.18.32'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+    
+    testImplementation fileTree(dir: 'lib/meap', include: '*.jar')
+    testImplementation "org.mockito:mockito-core:4.8.0"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$junit_version"
+    testImplementation "org.junit.jupiter:junit-jupiter-params:$junit_version"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junit_version"
+    testImplementation "javax.servlet:javax.servlet-api:$servlet_unit_test_version"
+}
+
+def appIdGlobal = 'd394b248-7f96-42d2-8a1a-21218bb7fcb4'
+def appIdChina = 'f97e14cd-ded7-44d8-97e0-b11f13646e44'
+
+//The definition jar file name for GLOBAL and CHINA region
+def globalJarFileName = rootProject.name + "-" + rootProject.ext.version + "_GLOBAL_unsigned"
+def chinaJarFileName = rootProject.name + "-" + rootProject.ext.version + "_CCHN_unsigned"
+def veracodeFileName = rootProject.name + "-" + rootProject.ext.version + "-veracode"
+
+def getDate() {
+    return new Date().format('yyyy-MM-dd HH:mm:ss')
+}
+
+def getBundleClassPath() {
+    def sb = StringBuilder.newInstance()
+    sb.append('.')
+  
+    configurations.runtimeClasspath.getFiles().each {
+        sb.append(', ')
+        sb.append(it.getName())
+    }
+  
+    println("getBundleClassPath : " + sb.toString())
+    return sb.toString()
+}
+
+//The task to build jar for GLOBAL region
+task meapJarForGlobal(type: Jar) {
+    archiveBaseName.set(globalJarFileName)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude 'lib'
+    from "$buildDir/classes/java/main"
+    from 'resources'
+    from configurations.runtimeClasspath
+        
+    manifest {
+        from 'META-INF/MANIFEST.MF'
+        attributes("Bundle-ClassPath": getBundleClassPath(),
+                   "Build-Time": getDate(),
+                   "Bundle-Version": rootProject.ext.version,
+                   "Application-Id": appIdGlobal)
+    }
+    entryCompression = ZipEntryCompression.STORED
+    destinationDir = file("dist")
+}
+
+assemble.dependsOn meapJarForGlobal
+
+//The task to build jar for CHINA region
+task meapJarForChina(type: Jar) {
+    archiveBaseName.set(chinaJarFileName)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude 'lib'
+    from "$buildDir/classes/java/main"
+    from 'resources'
+    from configurations.runtimeClasspath
+
+    manifest {
+        from 'META-INF/MANIFEST.MF'
+        attributes("Bundle-ClassPath": getBundleClassPath(),
+                   "Build-Time": getDate(),
+                   "Bundle-Version": rootProject.ext.version,
+                   "Application-Id": appIdChina)
+    }
+    entryCompression = ZipEntryCompression.STORED
+    destinationDir = file("dist")
+}
+
+assemble.dependsOn meapJarForChina
+
+task veracodeZip(dependsOn: [meapJarForGlobal, meapJarForChina], type: Zip) {
+    archiveFileName = veracodeFileName + '.zip'
+    archiveBaseName.set(archiveFileName)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from "$buildDir/classes/java/main"
+    from 'resources' exclude('DistributableSoftware.jar')
+    from 'META-INF/MANIFEST.MF'
+    entryCompression = ZipEntryCompression.STORED
+    destinationDirectory = file('dist')
+}
+assemble.dependsOn veracodeZip
+
+jacocoTestReport {
+    dependsOn 'meapJarForChina'
+    group = "reporting"
+    description = "Generate Jacoco coverage reports after running tests."
+   reports {
+       xml.required.set(true)
+       csv.required.set(false)
+       html.required.set(true)
+       html.outputLocation = file("$project.buildDir/jacocoReports")
+       xml.outputLocation = file("$project.buildDir/jacocoReports/coverage.xml")
+
+   }
+   def mainSrc = "$project.projectDir/src/java/main"
+   sourceDirectories.from files([mainSrc])
+}
+
+test {
+    println("Running JUnit Test")
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}

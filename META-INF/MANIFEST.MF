@@ -1,0 +1,28 @@
+Manifest-Version: 1.0
+Bundle-Vendor: Tungsten Automation
+Bundle-Copyright: (c) 2002-2025 Tungsten Automation. All rights reserved.
+Bundle-Activator: net.printix.device.canon.meap.capture.CaptureBundleActivator
+Bundle-DocURL: 
+Bundle-Name: Printix Go Scan
+Bundle-ContactAddress: 
+Bundle-Description: Printix Go Capture for Canon Meap devices
+Import-Package: com.canon.meap.service.avs,
+ org.osgi.service.http,
+ javax.servlet
+Applet-Name: PrintixCaptureEmbeddedApp
+FeatureCompatible: com.canon.meap.securityfunction.AccessControl
+DeviceSpecification-Ids: #
+OperatingCondition: NIR1
+MEAPSpecVersion: 55, 57, 113, 114, 120, 123
+Locales: en,fr,it,de,es,pt_BR,no
+ListeningPorts: 8443
+ConnectingPorts: 1-65535
+MaximumMemoryUsage: 15000
+MaximumThreadUsage: 100
+MaximumFilespaceUsage: 614400
+MaximumFiledescriptorUsage: 100
+MaximumSocketUsage: 10
+MinimumConsoleSize: 638x388
+PeriodicalFileWriteFrequency: 0
+NeedDefaultAccountSetting: true
+SLSRequired: administrator
